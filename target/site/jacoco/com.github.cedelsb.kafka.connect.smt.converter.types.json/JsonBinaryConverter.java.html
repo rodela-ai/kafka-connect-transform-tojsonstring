@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="es"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JsonBinaryConverter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">kafka-connect-transform-record2jsonstring</a> &gt; <a href="index.source.html" class="el_package">com.github.cedelsb.kafka.connect.smt.converter.types.json</a> &gt; <span class="el_source">JsonBinaryConverter.java</span></div><h1>JsonBinaryConverter.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (c) 2022. Guido Schmutz (schmutz68@gmail.com)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.github.cedelsb.kafka.connect.smt.converter.types.json;
+
+import org.bson.BsonBinary;
+import org.bson.json.Converter;
+import org.bson.json.StrictJsonWriter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Base64;
+
+<span class="fc" id="L27">public class JsonBinaryConverter implements Converter&lt;BsonBinary&gt; {</span>
+<span class="fc" id="L28">    private static final Logger LOGGER = LoggerFactory.getLogger(JsonBinaryConverter.class);</span>
+    @Override
+    public void convert(BsonBinary value, StrictJsonWriter writer) {
+        try {
+<span class="fc" id="L32">            byte[] b = value.getData();</span>
+<span class="fc" id="L33">            String base64 = Base64.getEncoder().encodeToString(b);</span>
+<span class="fc" id="L34">            writer.writeStartObject();</span>
+<span class="fc" id="L35">            writer.writeString(&quot;base64&quot;, base64);</span>
+<span class="fc" id="L36">            writer.writeEndObject();</span>
+<span class="nc" id="L37">        } catch (Exception e) {</span>
+<span class="nc" id="L38">            LOGGER.error(String.format(&quot;Fail to convert offset %s to JSON binary&quot;, value.toString()), e);</span>
+<span class="fc" id="L39">        }</span>
+<span class="fc" id="L40">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.6.202009150832</span></div></body></html>

@@ -1,0 +1,16 @@
+com/github/cedelsb/integration/Record2JsonStringIT.class
+com/github/cedelsb/kafka/connect/smt/converter/RecordConverterTest$2.class
+com/github/cedelsb/kafka/connect/smt/converter/RecordConverterTest$9.class
+com/github/cedelsb/kafka/connect/smt/converter/RecordConverterTest$7.class
+com/github/cedelsb/kafka/connect/smt/converter/RecordConverterTest$4.class
+com/github/cedelsb/kafka/connect/smt/converter/RecordConverterTest$3.class
+com/github/cedelsb/kafka/connect/smt/converter/SinkFieldConverterTest.class
+com/github/cedelsb/kafka/connect/smt/converter/RecordConverterTest$8.class
+com/github/cedelsb/kafka/connect/smt/converter/SinkConverterTest.class
+com/github/cedelsb/kafka/connect/smt/converter/RecordConverterTest$5.class
+com/github/cedelsb/kafka/connect/smt/converter/RecordConverterTest.class
+com/github/cedelsb/kafka/connect/smt/converter/RecordConverterTest$1.class
+com/github/cedelsb/kafka/connect/smt/converter/SinkDocumentTest.class
+com/github/cedelsb/kafka/connect/smt/converter/RecordConverterTest$6.class
+com/github/cedelsb/kafka/connect/smt/converter/RecordConverterTest$10.class
+com/github/cedelsb/kafka/connect/smt/Record2JsonStringConverterTest.class

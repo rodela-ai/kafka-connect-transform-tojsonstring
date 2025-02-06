@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="es"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AvroJsonSchemafulRecordConverter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">kafka-connect-transform-record2jsonstring</a> &gt; <a href="index.source.html" class="el_package">com.github.cedelsb.kafka.connect.smt.converter</a> &gt; <span class="el_source">AvroJsonSchemafulRecordConverter.java</span></div><h1>AvroJsonSchemafulRecordConverter.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (c) 2017. Hans-Peter Grahsl (grahslhp@gmail.com)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.github.cedelsb.kafka.connect.smt.converter;
+
+import com.github.cedelsb.kafka.connect.smt.converter.types.sink.bson.*;
+import com.github.cedelsb.kafka.connect.smt.converter.types.sink.bson.logical.*;
+import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.*;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
+import org.bson.BsonArray;
+import org.bson.BsonDocument;
+import org.bson.BsonNull;
+import org.bson.BsonValue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.*;
+
+//looks like Avro and JSON + Schema is convertible by means of
+//a unified conversion approach since they are using the
+//same the Struct/Type information ...
+public class AvroJsonSchemafulRecordConverter implements RecordConverter {
+
+<span class="fc" id="L39">    public static final Set&lt;String&gt; LOGICAL_TYPE_NAMES = new HashSet&lt;&gt;(</span>
+<span class="fc" id="L40">            Arrays.asList(Date.LOGICAL_NAME, Decimal.LOGICAL_NAME,</span>
+                            Time.LOGICAL_NAME, Timestamp.LOGICAL_NAME)
+        );
+
+<span class="fc" id="L44">    private final Map&lt;Schema.Type, SinkFieldConverter&gt; converters = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L45">    private final Map&lt;String, SinkFieldConverter&gt; logicalConverters = new HashMap&lt;&gt;();</span>
+
+<span class="fc" id="L47">    private static Logger logger = LoggerFactory.getLogger(AvroJsonSchemafulRecordConverter.class);</span>
+
+<span class="fc" id="L49">    public AvroJsonSchemafulRecordConverter() {</span>
+
+        //standard types
+<span class="fc" id="L52">        registerSinkFieldConverter(new BooleanFieldConverter());</span>
+<span class="fc" id="L53">        registerSinkFieldConverter(new Int8FieldConverter());</span>
+<span class="fc" id="L54">        registerSinkFieldConverter(new Int16FieldConverter());</span>
+<span class="fc" id="L55">        registerSinkFieldConverter(new Int32FieldConverter());</span>
+<span class="fc" id="L56">        registerSinkFieldConverter(new Int64FieldConverter());</span>
+<span class="fc" id="L57">        registerSinkFieldConverter(new Float32FieldConverter());</span>
+<span class="fc" id="L58">        registerSinkFieldConverter(new Float64FieldConverter());</span>
+<span class="fc" id="L59">        registerSinkFieldConverter(new StringFieldConverter());</span>
+<span class="fc" id="L60">        registerSinkFieldConverter(new BytesFieldConverter());</span>
+
+        //logical types
+<span class="fc" id="L63">        registerSinkFieldLogicalConverter(new DateFieldConverter());</span>
+<span class="fc" id="L64">        registerSinkFieldLogicalConverter(new TimeFieldConverter());</span>
+<span class="fc" id="L65">        registerSinkFieldLogicalConverter(new TimestampFieldConverter());</span>
+<span class="fc" id="L66">        registerSinkFieldLogicalConverter(new DecimalFieldConverter());</span>
+<span class="fc" id="L67">    }</span>
+
+    @Override
+    public BsonDocument convert(Schema schema, Object value) {
+
+<span class="fc bfc" id="L72" title="All 4 branches covered.">        if(schema == null || value == null) {</span>
+<span class="fc" id="L73">            throw new DataException(&quot;error: schema and/or value was null for AVRO conversion&quot;);</span>
+        }
+
+<span class="fc" id="L76">        return toBsonDoc(schema, value);</span>
+
+    }
+
+    private void registerSinkFieldConverter(SinkFieldConverter converter) {
+<span class="fc" id="L81">        converters.put(converter.getSchema().type(), converter);</span>
+<span class="fc" id="L82">    }</span>
+
+    private void registerSinkFieldLogicalConverter(SinkFieldConverter converter) {
+<span class="fc" id="L85">        logicalConverters.put(converter.getSchema().name(), converter);</span>
+<span class="fc" id="L86">    }</span>
+
+    private BsonDocument toBsonDoc(Schema schema, Object value) {
+<span class="fc" id="L89">        BsonDocument doc = new BsonDocument();</span>
+<span class="fc" id="L90">        schema.fields().forEach(f -&gt; processField(doc, (Struct)value, f));</span>
+<span class="fc" id="L91">        return doc;</span>
+    }
+
+    private void processField(BsonDocument doc, Struct struct, Field field) {
+
+<span class="fc" id="L96">        logger.trace(&quot;processing field '{}'&quot;,field.name());</span>
+
+<span class="fc bfc" id="L98" title="All 2 branches covered.">        if(isSupportedLogicalType(field.schema())) {</span>
+<span class="fc" id="L99">            doc.put(field.name(), getConverter(field.schema()).toBson(struct.get(field),field.schema()));</span>
+<span class="fc" id="L100">            return;</span>
+        }
+
+        try {
+<span class="pc bpc" id="L104" title="1 of 5 branches missed.">            switch(field.schema().type()) {</span>
+                case BOOLEAN:
+                case FLOAT32:
+                case FLOAT64:
+                case INT8:
+                case INT16:
+                case INT32:
+                case INT64:
+                case STRING:
+                case BYTES:
+<span class="fc" id="L114">                    handlePrimitiveField(doc, struct.get(field), field);</span>
+<span class="fc" id="L115">                    break;</span>
+                case STRUCT:
+<span class="fc" id="L117">                    handleStructField(doc, (Struct)struct.get(field), field);</span>
+<span class="fc" id="L118">                    break;</span>
+                case ARRAY:
+<span class="fc" id="L120">                    doc.put(field.name(),handleArrayField((List)struct.get(field), field));</span>
+<span class="fc" id="L121">                    break;</span>
+                case MAP:
+<span class="fc" id="L123">                    handleMapField(doc, (Map)struct.get(field), field);</span>
+<span class="fc" id="L124">                    break;</span>
+                default:
+<span class="nc" id="L126">                    logger.error(&quot;Invalid schema. unexpected / unsupported schema type '&quot;</span>
+<span class="nc" id="L127">                                 + field.schema().type() + &quot;' for field '&quot;</span>
+<span class="nc" id="L128">                                 + field.name() + &quot;' value='&quot; + struct + &quot;'&quot;);</span>
+<span class="nc" id="L129">                    throw new DataException(&quot;unexpected / unsupported schema type &quot; + field.schema().type());</span>
+            }
+<span class="nc" id="L131">        } catch (Exception exc) {</span>
+<span class="nc" id="L132">            logger.error(&quot;Error while processing field. schema type '&quot;</span>
+<span class="nc" id="L133">               + field.schema().type() + &quot;' for field '&quot;</span>
+<span class="nc" id="L134">               + field.name() + &quot;' value='&quot; + struct + &quot;'&quot;);</span>
+<span class="nc" id="L135">            throw new DataException(&quot;error while processing field &quot; + field.name(), exc);</span>
+<span class="fc" id="L136">        }</span>
+
+<span class="fc" id="L138">    }</span>
+
+    private void handleMapField(BsonDocument doc, Map m, Field field) {
+<span class="fc" id="L141">        logger.trace(&quot;handling complex type 'map'&quot;);</span>
+<span class="pc bpc" id="L142" title="1 of 2 branches missed.">        if(m==null) {</span>
+<span class="nc" id="L143">            logger.trace(&quot;no field in struct -&gt; adding null&quot;);</span>
+<span class="nc" id="L144">            doc.put(field.name(), BsonNull.VALUE);</span>
+<span class="nc" id="L145">            return;</span>
+        }
+<span class="fc" id="L147">        BsonDocument bd = new BsonDocument();</span>
+<span class="fc bfc" id="L148" title="All 2 branches covered.">        for(Object entry : m.keySet()) {</span>
+<span class="fc" id="L149">            String key = (String)entry;</span>
+<span class="fc" id="L150">            Schema.Type valueSchemaType = field.schema().valueSchema().type();</span>
+<span class="fc bfc" id="L151" title="All 2 branches covered.">            if(valueSchemaType.isPrimitive()) {</span>
+<span class="fc" id="L152">                bd.put(key, getConverter(field.schema().valueSchema()).toBson(m.get(key),field.schema()));</span>
+<span class="pc bpc" id="L153" title="1 of 2 branches missed.">            } else if (valueSchemaType.equals(Schema.Type.ARRAY)) {</span>
+<span class="fc" id="L154">                final Field elementField = new Field(key, 0, field.schema().valueSchema());</span>
+<span class="fc" id="L155">                final List list = (List)m.get(key);</span>
+<span class="fc" id="L156">                logger.trace(&quot;adding array values to {} of type valueSchema={} value='{}'&quot;,</span>
+<span class="fc" id="L157">                   elementField.name(), elementField.schema().valueSchema(), list);</span>
+<span class="fc" id="L158">                bd.put(key, handleArrayField(list, elementField));</span>
+<span class="fc" id="L159">            } else {</span>
+<span class="nc" id="L160">                bd.put(key, toBsonDoc(field.schema().valueSchema(), m.get(key)));</span>
+            }
+<span class="fc" id="L162">        }</span>
+<span class="fc" id="L163">        doc.put(field.name(), bd);</span>
+<span class="fc" id="L164">    }</span>
+
+    private BsonValue handleArrayField(List list, Field field) {
+<span class="fc" id="L167">        logger.trace(&quot;handling complex type 'array' of types '{}'&quot;,</span>
+<span class="fc" id="L168">           field.schema().valueSchema().type());</span>
+<span class="pc bpc" id="L169" title="1 of 2 branches missed.">        if(list==null) {</span>
+<span class="nc" id="L170">            logger.trace(&quot;no array -&gt; adding null&quot;);</span>
+<span class="nc" id="L171">            return BsonNull.VALUE;</span>
+        }
+<span class="fc" id="L173">        BsonArray array = new BsonArray();</span>
+<span class="fc" id="L174">        Schema.Type st = field.schema().valueSchema().type();</span>
+<span class="fc bfc" id="L175" title="All 2 branches covered.">        for(Object element : list) {</span>
+<span class="fc bfc" id="L176" title="All 2 branches covered.">            if(st.isPrimitive()) {</span>
+<span class="fc" id="L177">                array.add(getConverter(field.schema().valueSchema()).toBson(element,field.schema()));</span>
+<span class="fc bfc" id="L178" title="All 2 branches covered.">            } else if(st == Schema.Type.ARRAY) {</span>
+<span class="fc" id="L179">                Field elementField = new Field(&quot;first&quot;, 0, field.schema().valueSchema());</span>
+<span class="fc" id="L180">                array.add(handleArrayField((List)element,elementField));</span>
+<span class="fc" id="L181">            } else {</span>
+<span class="fc" id="L182">                array.add(toBsonDoc(field.schema().valueSchema(), element));</span>
+            }
+<span class="fc" id="L184">        }</span>
+<span class="fc" id="L185">        return array;</span>
+    }
+
+    private void handleStructField(BsonDocument doc, Struct struct, Field field) {
+<span class="fc" id="L189">        logger.trace(&quot;handling complex type 'struct'&quot;);</span>
+<span class="pc bpc" id="L190" title="1 of 2 branches missed.">        if(struct!=null) {</span>
+<span class="fc" id="L191">            logger.trace(struct.toString());</span>
+<span class="fc" id="L192">            doc.put(field.name(), toBsonDoc(field.schema(), struct));</span>
+        } else {
+<span class="nc" id="L194">            logger.trace(&quot;no field in struct -&gt; adding null&quot;);</span>
+<span class="nc" id="L195">            doc.put(field.name(), BsonNull.VALUE);</span>
+        }
+<span class="fc" id="L197">    }</span>
+
+    private void handlePrimitiveField(BsonDocument doc, Object value, Field field) {
+<span class="fc" id="L200">        logger.trace(&quot;handling primitive type '{}' name='{}'&quot;,field.schema().type(),field.name());</span>
+<span class="fc" id="L201">        doc.put(field.name(), getConverter(field.schema()).toBson(value,field.schema()));</span>
+<span class="fc" id="L202">    }</span>
+
+    private boolean isSupportedLogicalType(Schema schema) {
+
+<span class="fc bfc" id="L206" title="All 2 branches covered.">        if(schema.name() == null) {</span>
+<span class="fc" id="L207">            return false;</span>
+        }
+
+<span class="fc" id="L210">        return LOGICAL_TYPE_NAMES.contains(schema.name());</span>
+
+    }
+
+    private SinkFieldConverter getConverter(Schema schema) {
+
+        SinkFieldConverter converter;
+
+<span class="fc bfc" id="L218" title="All 2 branches covered.">        if(isSupportedLogicalType(schema)) {</span>
+<span class="fc" id="L219">            converter = logicalConverters.get(schema.name());</span>
+        } else {
+<span class="fc" id="L221">            converter = converters.get(schema.type());</span>
+        }
+
+<span class="pc bpc" id="L224" title="1 of 2 branches missed.">        if (converter == null) {</span>
+<span class="nc" id="L225">            throw new ConnectException(&quot;error no registered converter found for &quot; + schema.type().getName());</span>
+        }
+
+<span class="fc" id="L228">        return converter;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.6.202009150832</span></div></body></html>

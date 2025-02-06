@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="es"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SinkFieldConverter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">kafka-connect-transform-record2jsonstring</a> &gt; <a href="index.source.html" class="el_package">com.github.cedelsb.kafka.connect.smt.converter</a> &gt; <span class="el_source">SinkFieldConverter.java</span></div><h1>SinkFieldConverter.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (c) 2017. Hans-Peter Grahsl (grahslhp@gmail.com)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.github.cedelsb.kafka.connect.smt.converter;
+
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.errors.DataException;
+import org.bson.BsonNull;
+import org.bson.BsonValue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public abstract class SinkFieldConverter extends FieldConverter {
+
+<span class="fc" id="L28">    private static Logger logger = LoggerFactory.getLogger(SinkFieldConverter.class);</span>
+
+    public SinkFieldConverter(Schema schema) {
+<span class="fc" id="L31">        super(schema);</span>
+<span class="fc" id="L32">    }</span>
+
+    public abstract BsonValue toBson(Object data);
+
+    public BsonValue toBson(Object data, Schema fieldSchema) {
+<span class="fc bfc" id="L37" title="All 2 branches covered.">        if(!fieldSchema.isOptional()) {</span>
+
+<span class="fc bfc" id="L39" title="All 2 branches covered.">            if(data == null)</span>
+<span class="fc" id="L40">                throw new DataException(&quot;error: schema not optional but data was null&quot;);</span>
+
+<span class="fc" id="L42">            logger.trace(&quot;field not optional and data is '{}'&quot;,data.toString());</span>
+<span class="fc" id="L43">            return toBson(data);</span>
+        }
+
+<span class="pc bpc" id="L46" title="1 of 2 branches missed.">        if(data != null) {</span>
+<span class="nc" id="L47">            logger.trace(&quot;field optional and data is '{}'&quot;,data.toString());</span>
+<span class="nc" id="L48">            return toBson(data);</span>
+        }
+
+<span class="fc bfc" id="L51" title="All 2 branches covered.">        if(fieldSchema.defaultValue() != null) {</span>
+<span class="fc" id="L52">            logger.trace(&quot;field optional and no data but default value is '{}'&quot;,fieldSchema.defaultValue().toString());</span>
+<span class="fc" id="L53">            return toBson(fieldSchema.defaultValue());</span>
+        }
+
+<span class="fc" id="L56">        logger.trace(&quot;field optional, no data and no default value thus '{}'&quot;, BsonNull.VALUE);</span>
+<span class="fc" id="L57">        return BsonNull.VALUE;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.6.202009150832</span></div></body></html>

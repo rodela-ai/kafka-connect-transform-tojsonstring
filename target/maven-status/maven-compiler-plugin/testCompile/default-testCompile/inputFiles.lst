@@ -1,0 +1,6 @@
+/run/media/blitz/Gaming/development/ntt/ntt/kafka-connect-transform-tojsonstring/src/test/java/com/github/cedelsb/kafka/connect/smt/converter/RecordConverterTest.java
+/run/media/blitz/Gaming/development/ntt/ntt/kafka-connect-transform-tojsonstring/src/test/java/com/github/cedelsb/kafka/connect/smt/converter/SinkFieldConverterTest.java
+/run/media/blitz/Gaming/development/ntt/ntt/kafka-connect-transform-tojsonstring/src/test/java/com/github/cedelsb/kafka/connect/smt/converter/SinkDocumentTest.java
+/run/media/blitz/Gaming/development/ntt/ntt/kafka-connect-transform-tojsonstring/src/test/java/com/github/cedelsb/kafka/connect/smt/converter/SinkConverterTest.java
+/run/media/blitz/Gaming/development/ntt/ntt/kafka-connect-transform-tojsonstring/src/test/java/com/github/cedelsb/integration/Record2JsonStringIT.java
+/run/media/blitz/Gaming/development/ntt/ntt/kafka-connect-transform-tojsonstring/src/test/java/com/github/cedelsb/kafka/connect/smt/Record2JsonStringConverterTest.java

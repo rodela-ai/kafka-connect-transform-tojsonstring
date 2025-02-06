@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="es"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Record2JsonStringConverter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">kafka-connect-transform-record2jsonstring</a> &gt; <a href="index.source.html" class="el_package">com.github.cedelsb.kafka.connect.smt</a> &gt; <span class="el_source">Record2JsonStringConverter.java</span></div><h1>Record2JsonStringConverter.java</h1><pre class="source lang-java linenums">/*
+ * Copyright © 2021 Christian Edelsbrunner (christian.edelsbrunner@gmail.com)
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.github.cedelsb.kafka.connect.smt;
+
+import com.github.cedelsb.kafka.connect.smt.converter.AvroJsonSchemafulRecordConverter;
+import com.github.cedelsb.kafka.connect.smt.converter.JsonSchemalessRecordConverter;
+import com.github.cedelsb.kafka.connect.smt.converter.types.json.JsonBinaryConverter;
+import com.github.cedelsb.kafka.connect.smt.converter.types.json.JsonDateTimeAsLongConverter;
+import com.github.cedelsb.kafka.connect.smt.converter.types.json.JsonDateTimeAsStringConverter;
+import com.github.cedelsb.kafka.connect.smt.converter.types.json.JsonDecimalConverter;
+import com.github.underscore.U;
+import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.connect.connector.ConnectRecord;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.transforms.Transformation;
+import org.apache.kafka.connect.transforms.util.SimpleConfig;
+import org.bson.BsonDocument;
+import org.bson.json.Converter;
+import org.bson.json.JsonMode;
+import org.bson.json.JsonWriterSettings;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Map;
+
+import static org.apache.kafka.connect.transforms.util.Requirements.requireStruct;
+
+<span class="fc" id="L44">public abstract class Record2JsonStringConverter&lt;R extends ConnectRecord&lt;R&gt;&gt; implements Transformation&lt;R&gt; {</span>
+
+<span class="fc" id="L46">    private static Logger logger = LoggerFactory.getLogger(Record2JsonStringConverter.class);</span>
+
+    public static final String OVERVIEW_DOC =
+            &quot;Converts a record value with a schema into a new schema containing a single JSON string field&quot;;
+
+    private static final class ConfigName {
+        public static final String JSON_STRING_FIELD_NAME = &quot;json.string.field.name&quot;;
+        public static final String JSON_WRITER_OUTPUT_MODE = &quot;json.writer.output.mode&quot;;
+        public static final String POST_PROCESSING_TO_XML = &quot;post.processing.to.xml&quot;;
+        public static final String JSON_WRITER_HANDLE_LOGICAL_TYPES = &quot;json.writer.handle.logical.types&quot;;
+        public static final String JSON_WRITER_DATETIME_LOGICAL_TYPES_AS = &quot;json.writer.datetime.logical.types.as&quot;;
+        public static final String JSON_WRITER_DATETIME_PATTERN = &quot;json.writer.datetime.pattern&quot;;
+        public static final String JSON_WRITER_DATETIME_ZONE_ID = &quot;json.writer.datetime.zoneid&quot;;
+    }
+
+<span class="fc" id="L61">    public static final ConfigDef CONFIG_DEF = new ConfigDef()</span>
+<span class="fc" id="L62">            .define(ConfigName.JSON_STRING_FIELD_NAME, ConfigDef.Type.STRING, &quot;jsonstring&quot;, ConfigDef.Importance.HIGH,</span>
+                    &quot;Field name for output JSON String field&quot;)
+<span class="fc" id="L64">            .define(ConfigName.JSON_WRITER_OUTPUT_MODE, ConfigDef.Type.STRING, &quot;RELAXED&quot;, ConfigDef.Importance.MEDIUM,</span>
+                    &quot;Output mode of JSON Writer (RELAXED,EXTENDED,SHELL or STRICT)&quot;)
+<span class="fc" id="L66">            .define(ConfigName.POST_PROCESSING_TO_XML, ConfigDef.Type.BOOLEAN, false, ConfigDef.Importance.LOW,</span>
+                    &quot;Some old RBDMS like Oracle 11 are not the best in handling JSON - for such scenarios this option can be used to transform the generated JSON into a schemaless XML String&quot;)
+<span class="fc" id="L68">            .define(ConfigName.JSON_WRITER_HANDLE_LOGICAL_TYPES, ConfigDef.Type.BOOLEAN, false, ConfigDef.Importance.LOW,</span>
+                    &quot;In BSON serialization, logical types (dates, times, timestamps, decimal, bytes) are embedded inside a $&lt;type&gt; field. Setting this configuration to true will remove the embeddings and add the value to the parent field.&quot;)
+<span class="fc" id="L70">            .define(ConfigName.JSON_WRITER_DATETIME_LOGICAL_TYPES_AS, ConfigDef.Type.STRING, &quot;LONG&quot;, ConfigDef.Importance.LOW,</span>
+                    &quot;Write the logical type field (of time, date or timestamp) either as a STRING or a LONG (epoc) value, only applicable if json.writer.handle.logical.types=true&quot;)
+<span class="fc" id="L72">            .define(ConfigName.JSON_WRITER_DATETIME_PATTERN, ConfigDef.Type.STRING, null, ConfigDef.Importance.LOW,</span>
+                    &quot;The pattern (either a predefined constant or pattern letters) to use to format the date/time or timestamp as string, only applicable if json.writer.datetime.logical.types.as=STRING&quot;)
+<span class="fc" id="L74">            .define(ConfigName.JSON_WRITER_DATETIME_ZONE_ID, ConfigDef.Type.STRING, &quot;UTC&quot;, ConfigDef.Importance.LOW,</span>
+                    &quot;The zone id to use to format the date/time or timestamp as string, only applicable if json.writer.datetime.logical.types.as=STRING&quot;
+            );
+
+    private static final String PURPOSE = &quot;Converting record with Schema into a simple JSON String&quot;;
+
+    private String jsonStringFieldName;
+    private Schema jsonStringOutputSchema;
+    private boolean transformToXML;
+    private String writeDatetimeLogicalTypesAs;
+    private String writeDatetimeWithPattern;
+    private String writeDatetimeWithZoneId;
+
+    private boolean handleLogicalTypes;
+
+    AvroJsonSchemafulRecordConverter converter;
+    JsonSchemalessRecordConverter converterWithoutSchema;
+    JsonWriterSettings jsonWriterSettings;
+
+    @Override
+    public void configure(Map&lt;String, ?&gt; props) {
+<span class="fc" id="L95">        final SimpleConfig config = new SimpleConfig(CONFIG_DEF, props);</span>
+<span class="fc" id="L96">        jsonStringFieldName = config.getString(ConfigName.JSON_STRING_FIELD_NAME);</span>
+<span class="fc" id="L97">        jsonStringOutputSchema = makeJsonStringOutputSchema();</span>
+<span class="fc" id="L98">        handleLogicalTypes = config.getBoolean(ConfigName.JSON_WRITER_HANDLE_LOGICAL_TYPES);</span>
+<span class="fc" id="L99">        writeDatetimeLogicalTypesAs = config.getString(ConfigName.JSON_WRITER_DATETIME_LOGICAL_TYPES_AS);</span>
+<span class="fc" id="L100">        writeDatetimeWithPattern = config.getString(ConfigName.JSON_WRITER_DATETIME_PATTERN);</span>
+<span class="fc" id="L101">        writeDatetimeWithZoneId = config.getString(ConfigName.JSON_WRITER_DATETIME_ZONE_ID);</span>
+
+<span class="fc bfc" id="L103" title="All 2 branches covered.">        if (handleLogicalTypes) {</span>
+<span class="fc" id="L104">            Converter&lt;Long&gt; dateTimeConverter = null;</span>
+<span class="fc bfc" id="L105" title="All 2 branches covered.">            if (writeDatetimeLogicalTypesAs.equalsIgnoreCase(&quot;STRING&quot;)) {</span>
+<span class="fc" id="L106">                dateTimeConverter = new JsonDateTimeAsStringConverter(writeDatetimeWithPattern, writeDatetimeWithZoneId);</span>
+<span class="fc bfc" id="L107" title="All 2 branches covered.">            } else if (writeDatetimeLogicalTypesAs.equalsIgnoreCase(&quot;LONG&quot;)) {</span>
+<span class="fc" id="L108">                dateTimeConverter = new JsonDateTimeAsLongConverter();</span>
+            } else {
+<span class="fc" id="L110">                throw new IllegalArgumentException(&quot;Wrong value for configuration setting: &quot; + ConfigName.JSON_WRITER_DATETIME_LOGICAL_TYPES_AS + &quot;=&quot; + writeDatetimeLogicalTypesAs);</span>
+            }
+
+<span class="fc" id="L113">            jsonWriterSettings = JsonWriterSettings</span>
+<span class="fc" id="L114">                    .builder()</span>
+<span class="fc" id="L115">                    .outputMode(toJsonMode(config.getString(ConfigName.JSON_WRITER_OUTPUT_MODE)))</span>
+<span class="fc" id="L116">                    .dateTimeConverter(dateTimeConverter)</span>
+<span class="fc" id="L117">                    .decimal128Converter(new JsonDecimalConverter())</span>
+<span class="fc" id="L118">                    .binaryConverter(new JsonBinaryConverter())</span>
+<span class="fc" id="L119">                    .build();</span>
+<span class="fc" id="L120">        } else {</span>
+<span class="fc" id="L121">            jsonWriterSettings = JsonWriterSettings</span>
+<span class="fc" id="L122">                    .builder()</span>
+<span class="fc" id="L123">                    .outputMode(toJsonMode(config.getString(ConfigName.JSON_WRITER_OUTPUT_MODE)))</span>
+<span class="fc" id="L124">                    .build();</span>
+        }
+
+<span class="fc" id="L127">        converter = new AvroJsonSchemafulRecordConverter();</span>
+<span class="fc" id="L128">        converterWithoutSchema = new JsonSchemalessRecordConverter();</span>
+
+<span class="fc" id="L130">        transformToXML = config.getBoolean(ConfigName.POST_PROCESSING_TO_XML);</span>
+<span class="fc" id="L131">    }</span>
+
+    @Override
+    public R apply(R record) {
+
+<span class="fc bfc" id="L136" title="All 2 branches covered.">        if (isTombstoneRecord(record))</span>
+<span class="fc" id="L137">            return record;</span>
+
+<span class="fc" id="L139">        Schema schema = operatingSchema(record);</span>
+<span class="fc" id="L140">        Object value = operatingValue(record);</span>
+
+        BsonDocument bsonDoc;
+<span class="fc bfc" id="L143" title="All 2 branches covered.">        if (schema != null) {</span>
+<span class="fc" id="L144">            bsonDoc = convertWithSchema(schema, value);</span>
+        } else {
+<span class="fc" id="L146">            bsonDoc = convertWithoutSchema(value);</span>
+        }
+
+<span class="fc" id="L149">        final Struct jsonStringOutputStruct = new Struct(jsonStringOutputSchema);</span>
+<span class="fc" id="L150">        String outputDocument = bsonDoc.toJson(jsonWriterSettings);</span>
+
+<span class="fc bfc" id="L152" title="All 2 branches covered.">        if (transformToXML) {</span>
+<span class="fc" id="L153">            outputDocument = U.jsonToXml(outputDocument);</span>
+        }
+
+<span class="fc" id="L156">        jsonStringOutputStruct.put(jsonStringFieldName, outputDocument);</span>
+
+<span class="fc" id="L158">        return newRecord(record, jsonStringOutputSchema, jsonStringOutputStruct);</span>
+    }
+
+    private BsonDocument convertWithSchema(Schema schema, Object value) {
+<span class="fc" id="L162">        final Struct struct = requireStruct(value, PURPOSE);</span>
+<span class="fc" id="L163">        return converter.convert(schema, struct);</span>
+    }
+
+    private BsonDocument convertWithoutSchema(Object value) {
+<span class="fc" id="L167">        return converterWithoutSchema.convert(makeDefaultSchema(), value);</span>
+    }
+
+    private Schema makeDefaultSchema() {
+<span class="fc" id="L171">        return SchemaBuilder</span>
+<span class="fc" id="L172">                .struct()</span>
+<span class="fc" id="L173">                .name(&quot;defaultSchema&quot;)</span>
+<span class="fc" id="L174">                .version(1)</span>
+<span class="fc" id="L175">                .field(&quot;value&quot;, Schema.STRING_SCHEMA)</span>
+<span class="fc" id="L176">                .build();</span>
+    }
+
+    @Override
+    public ConfigDef config() {
+<span class="nc" id="L181">        return CONFIG_DEF;</span>
+    }
+
+
+    @Override
+    public void close() {
+<span class="nc" id="L187">        converter = null;</span>
+<span class="nc" id="L188">    }</span>
+
+    private Schema makeJsonStringOutputSchema() {
+<span class="fc" id="L191">        return SchemaBuilder</span>
+<span class="fc" id="L192">                .struct()</span>
+<span class="fc" id="L193">                .name(&quot;jsonStringSchema&quot;)</span>
+<span class="fc" id="L194">                .version(1)</span>
+<span class="fc" id="L195">                .field(jsonStringFieldName, Schema.STRING_SCHEMA)</span>
+<span class="fc" id="L196">                .build();</span>
+    }
+
+    private JsonMode toJsonMode(String jsonMode) {
+<span class="pc bpc" id="L200" title="1 of 4 branches missed.">        switch (jsonMode) {</span>
+            case &quot;SHELL&quot;:
+<span class="nc" id="L202">                return JsonMode.SHELL;</span>
+            case &quot;EXTENDED&quot;:
+<span class="fc" id="L204">                return JsonMode.EXTENDED;</span>
+            case &quot;STRICT&quot;:
+<span class="fc" id="L206">                return JsonMode.STRICT;</span>
+            default:
+<span class="fc" id="L208">                return JsonMode.RELAXED;</span>
+        }
+    }
+
+    protected abstract Schema operatingSchema(R record);
+
+    protected abstract Object operatingValue(R record);
+
+    protected abstract R newRecord(R record, Schema updatedSchema, Object updatedValue);
+
+    protected abstract boolean isTombstoneRecord(R record);
+
+<span class="fc" id="L220">    public static class Key&lt;R extends ConnectRecord&lt;R&gt;&gt; extends Record2JsonStringConverter&lt;R&gt; {</span>
+
+        @Override
+        protected Schema operatingSchema(R record) {
+
+<span class="fc" id="L225">            return record.keySchema();</span>
+        }
+
+        @Override
+        protected Object operatingValue(R record) {
+
+<span class="fc" id="L231">            return record.key();</span>
+        }
+
+        @Override
+        protected R newRecord(R record, Schema updatedSchema, Object updatedValue) {
+<span class="fc" id="L236">            return record.newRecord(record.topic(), record.kafkaPartition(), updatedSchema, updatedValue, record.valueSchema(), record.value(), record.timestamp());</span>
+        }
+
+        @Override
+        protected boolean isTombstoneRecord(R record) {
+<span class="pc bpc" id="L241" title="1 of 2 branches missed.">            return record.key() == null;</span>
+        }
+
+    }
+
+<span class="fc" id="L246">    public static class Value&lt;R extends ConnectRecord&lt;R&gt;&gt; extends Record2JsonStringConverter&lt;R&gt; {</span>
+
+        @Override
+        protected Schema operatingSchema(R record) {
+<span class="fc" id="L250">            return record.valueSchema();</span>
+        }
+
+        @Override
+        protected Object operatingValue(R record) {
+<span class="fc" id="L255">            return record.value();</span>
+        }
+
+        @Override
+        protected R newRecord(R record, Schema updatedSchema, Object updatedValue) {
+<span class="fc" id="L260">            return record.newRecord(record.topic(), record.kafkaPartition(), record.keySchema(), record.key(), updatedSchema, updatedValue, record.timestamp());</span>
+        }
+
+        @Override
+        protected boolean isTombstoneRecord(R record) {
+<span class="fc bfc" id="L265" title="All 2 branches covered.">            return record.value() == null;</span>
+        }
+
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.6.202009150832</span></div></body></html>
